@@ -1,17 +1,14 @@
-import { describe, it, beforeAll, expect } from 'vitest';
+import { describe, it, beforeAll, expect, vi } from 'vitest';
+
 import jsdom from 'jsdom';
 import lodash from 'lodash';
 
 import {
-  buildChallenge,
-  runnerTypes
-} from '../../../client/src/templates/Challenges/utils/build';
-import {
   challengeTypes,
   hasNoSolution
-} from '../../../shared/config/challenge-types';
-import { getLines } from '../../../shared/utils/get-lines';
-import { prefixDoctype } from '../../../client/src/templates/Challenges/utils/frame';
+} from '@freecodecamp/shared/config/challenge-types';
+import { getLines } from '@freecodecamp/shared/utils/get-lines';
+import { prefixDoctype } from '@freecodecamp/challenge-builder/build';
 
 import { getChallengesForLang } from '../get-challenges.js';
 import { challengeSchemaValidator } from '../../schema/challenge-schema.js';
@@ -19,7 +16,7 @@ import { challengeSchemaValidator } from '../../schema/challenge-schema.js';
 import { curriculumSchemaValidator } from '../../schema/curriculum-schema.js';
 import { validateMetaSchema } from '../../schema/meta-schema.js';
 import { getBlockStructure } from '../file-handler.js';
-import { FCC_CHALLENGE_ID, testedLang } from '../config.js';
+import { FCC_CHALLENGE_ID, CURRICULUM_LOCALE } from '../config.js';
 import ChallengeTitles from './utils/challenge-titles.js';
 import MongoIds from './utils/mongo-ids.js';
 import createPseudoWorker from './utils/pseudo-worker.js';
@@ -27,6 +24,43 @@ import createPseudoWorker from './utils/pseudo-worker.js';
 import { sortChallenges } from './utils/sort-challenges.js';
 
 const { flatten, isEmpty, cloneDeep } = lodash;
+
+vi.mock(
+  '@freecodecamp/challenge-builder/typescript-worker-handler',
+  async importOriginal => {
+    const actual = await importOriginal();
+
+    // ts and tsvfs must match the versions used in the typescript-worker.
+    const tsvfs = await import('@typescript/vfs-1.6.1');
+    const ts = await import('typescript-5.9.2');
+    // use the same TS compiler as the challenge-builder
+    const tsCompiler =
+      await import('@freecodecamp/browser-scripts/ts-compiler');
+    const compiler = new tsCompiler.Compiler(ts, tsvfs);
+    let previousTsconfig;
+    let hasConfiguredCompiler = false;
+
+    const mustSetup = tsconfig =>
+      !hasConfiguredCompiler ||
+      JSON.stringify(tsconfig) !== JSON.stringify(previousTsconfig);
+
+    return {
+      ...actual,
+      setupTSCompiler: tsconfig => {
+        if (mustSetup(tsconfig)) {
+          compiler.setup({ useNodeModules: true, tsconfig });
+          previousTsconfig = lodash.cloneDeep(tsconfig);
+          hasConfiguredCompiler = true;
+        }
+      },
+      compileTypeScriptCode: code => {
+        const { result, error } = compiler.compile(code, 'index.tsx');
+        if (error) throw error;
+        return result;
+      }
+    };
+  }
+);
 
 const dom = new jsdom.JSDOM('');
 global.document = dom.window.document;
@@ -56,12 +90,20 @@ async function newPageContext() {
 }
 
 export async function defineTestsForBlock(testFilter) {
-  const lang = testedLang();
-  const challenges = await getChallenges(lang, testFilter);
-  const nonCertificationChallenges = challenges.filter(
+  const allChallenges = await getChallenges(CURRICULUM_LOCALE, testFilter);
+  const nonCertificationChallenges = allChallenges.filter(
     ({ challengeType }) => challengeType !== 7
   );
-  if (isEmpty(nonCertificationChallenges)) {
+
+  // This is a bit of a dirty hack, but when we're testing, we only need to
+  // validate the challenges for the block we're testing once, rather than
+  // once for each superBlock the challenge appears in.
+  const firstSuperBlock = allChallenges[0]?.superBlock;
+  const challenges = nonCertificationChallenges.filter(
+    ({ superBlock }) => superBlock === firstSuperBlock
+  );
+
+  if (isEmpty(challenges)) {
     console.warn(
       `No non-certification challenges to test for block ${testFilter.block}.`
     );
@@ -84,15 +126,15 @@ export async function defineTestsForBlock(testFilter) {
     }
   }
 
-  const challengeData = { meta, challenges, lang };
+  const challengeData = { meta, challenges, lang: CURRICULUM_LOCALE };
 
-  describe('Check challenges', () => {
+  describe('Check challenges', async () => {
     beforeAll(async () => {
       page = await newPageContext();
       global.Worker = createPseudoWorker(page);
     });
 
-    populateTestsForLang(challengeData, () => page);
+    await populateTestsForLang(challengeData, () => page);
   });
 }
 
@@ -123,7 +165,12 @@ export async function getChallenges(lang, filters) {
   return sortChallenges(challenges);
 }
 
-function populateTestsForLang({ lang, challenges, meta }) {
+async function populateTestsForLang({ lang, challenges, meta }) {
+  // We have to dynamically import this because otherwise it will not be mocked.
+  // Presumably this is because we import from_this file in the generated block
+  // test files and that happens before the mock is applied.
+  const { buildChallenge } =
+    await import('@freecodecamp/challenge-builder/build');
   const validateChallenge = challengeSchemaValidator();
 
   describe(`Language: ${lang}`, function () {
@@ -146,13 +193,13 @@ function populateTestsForLang({ lang, challenges, meta }) {
           describe(`ID: ${challenge.id}`, function () {
             // Note: the title in meta.json are purely for human readability and
             // do not include translations, so we do not validate against them.
-            it('Matches an ID in meta.json', function () {
+            it(`Matches an ID in ${challenge.block}.json`, function () {
               const index = meta[dashedBlockName]?.challengeOrder?.findIndex(
                 ({ id }) => id === challenge.id
               );
               expect(
                 index,
-                `Cannot find ID "${challenge.id}" in meta.json file for block "${dashedBlockName}"`
+                `Cannot find ID "${challenge.id}" in ${challenge.block}.json file for block "${dashedBlockName}"`
               ).toBeGreaterThanOrEqual(0);
             });
 
@@ -190,6 +237,13 @@ function populateTestsForLang({ lang, challenges, meta }) {
               return;
             }
 
+            it('Has challenge files', function () {
+              expect(
+                challenge.challengeFiles,
+                `challengeFiles should exist. Check that the challenge has a "seed" section in the markdown file.`
+              ).toBeDefined();
+            });
+
             // The python tests are (currently) slow, so we give them more time.
             const timePerTest =
               challengeType === challengeTypes.python ? 10000 : 5000;
@@ -225,7 +279,10 @@ function populateTestsForLang({ lang, challenges, meta }) {
                   }
                 }
                 console.error = oldConsoleError;
-                expect(fails, 'Test suite should fail on the initial contents');
+                expect(
+                  fails,
+                  'Test suite should fail on the initial contents'
+                ).toBe(true);
               },
               timePerTest * tests.length + 20000
             );
@@ -341,6 +398,8 @@ async function createTestRunner(
   buildChallenge,
   solutionFromNext
 ) {
+  const { runnerTypes } = await import('@freecodecamp/challenge-builder/build');
+
   const challengeFiles = replaceChallengeFilesContentsWithSolutions(
     challenge.challengeFiles,
     solutionFiles

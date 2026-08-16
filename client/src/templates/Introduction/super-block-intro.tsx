@@ -15,11 +15,11 @@ import { useFeatureValue } from '@growthbook/growthbook-react';
 import {
   SuperBlocks,
   certificationCollectionSuperBlocks
-} from '../../../../shared-dist/config/curriculum';
+} from '@freecodecamp/shared/config/curriculum';
+import callGA from '../../analytics/call-ga';
 import DonateModal from '../../components/Donation/donation-modal';
 import Login from '../../components/Header/components/login';
 import Map from '../../components/Map';
-import callGA from '../../analytics/call-ga';
 import { tryToShowDonationModal } from '../../redux/actions';
 import {
   isSignedInSelector,
@@ -33,12 +33,9 @@ import type {
   User,
   ChapterBasedSuperBlockStructure
 } from '../../redux/prop-types';
-import { CertTitle, liveCerts } from '../../../config/cert-and-project-map';
-import { superBlockToCertMap } from '../../../../shared-dist/config/certification-settings';
-import {
-  BlockLayouts,
-  BlockLabel
-} from '../../../../shared-dist/config/blocks';
+import { liveCerts } from '../../../config/cert-and-project-map';
+import { superBlockToCertMap } from '@freecodecamp/shared/config/certification-settings';
+import { BlockLayouts, BlockLabel } from '@freecodecamp/shared/config/blocks';
 import LegacyLinks from './components/legacy-links';
 import HelpTranslate from './components/help-translate';
 import SuperBlockIntro from './components/super-block-intro';
@@ -58,7 +55,7 @@ type ChallengeNode = {
     fields: { slug: string };
     id: string;
     block: string;
-    blockLabel: BlockLabel;
+    blockLabel?: BlockLabel;
     challengeType: number;
     title: string;
     order: number;
@@ -85,8 +82,6 @@ type SuperBlockProps = {
   location: WindowLocation<{ breadcrumbBlockClick: string }>;
   pageContext: {
     superBlock: SuperBlocks;
-    title: CertTitle;
-    certification: string;
   };
   resetExpansion: () => void;
   toggleBlock: (arg0: string) => void;
@@ -164,7 +159,7 @@ const SuperBlockIntroductionPage = (props: SuperBlockProps) => {
     currentChallengeId,
     signInLoading,
     user,
-    pageContext: { superBlock, title, certification },
+    pageContext: { superBlock },
     location
   } = props;
 
@@ -256,6 +251,34 @@ const SuperBlockIntroductionPage = (props: SuperBlockProps) => {
     });
   };
 
+  const hasNotstarted = completedChallenges.length === 0;
+  const nextChallengeSlug = useMemo(() => {
+    if (hasNotstarted) return superBlockChallenges[0]?.fields.slug || null;
+    const lastCompletedChallenge = completedChallenges.reduce<
+      (typeof completedChallenges)[number] | null
+    >((latest, challenge) => {
+      if (!challenge?.completedDate) return latest;
+      if (
+        !latest?.completedDate ||
+        challenge.completedDate > latest.completedDate
+      ) {
+        return challenge;
+      }
+      return latest;
+    }, null);
+
+    const nextChallenge = () => {
+      if (!lastCompletedChallenge?.id) return null;
+      const lastCompletedIndex = superBlockChallenges.findIndex(
+        ({ id }) => id === lastCompletedChallenge?.id
+      );
+      if (lastCompletedIndex === -1) return null;
+      return superBlockChallenges[lastCompletedIndex + 1] ?? null;
+    };
+
+    return nextChallenge()?.fields.slug || null;
+  }, [completedChallenges, superBlockChallenges, hasNotstarted]);
+
   return (
     <>
       <Helmet>
@@ -273,6 +296,8 @@ const SuperBlockIntroductionPage = (props: SuperBlockProps) => {
                   onCertificationDonationAlertClick
                 }
                 isDonating={user?.isDonating ?? false}
+                hasNotstarted={hasNotstarted}
+                nextChallengeSlug={nextChallengeSlug}
               />
               <HelpTranslate superBlock={superBlock} />
               <Spacer size='l' />
@@ -283,7 +308,6 @@ const SuperBlockIntroductionPage = (props: SuperBlockProps) => {
               </h2>
               <Spacer size='m' />
               <SuperBlockMap
-                certification={certification}
                 completedChallengeIds={completedChallenges.map(c => c.id)}
                 disabledBlocks={disabledBlocksFeature}
                 initialExpandedBlock={initialExpandedBlock}
@@ -293,7 +317,6 @@ const SuperBlockIntroductionPage = (props: SuperBlockProps) => {
                 }
                 superBlock={superBlock}
                 superBlockChallenges={superBlockChallenges}
-                title={title}
                 user={user}
               />
               {!isSignedIn && !signInLoading && (
@@ -331,13 +354,11 @@ export default connect(
 export const query = graphql`
   query SuperBlockIntroPageQuery {
     allChallengeNode(
-      sort: {
-        fields: [
-          challenge___superOrder
-          challenge___order
-          challenge___challengeOrder
-        ]
-      }
+      sort: [
+        { challenge: { superOrder: ASC } }
+        { challenge: { order: ASC } }
+        { challenge: { challengeOrder: ASC } }
+      ]
     ) {
       nodes {
         challenge {

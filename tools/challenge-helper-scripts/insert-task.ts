@@ -1,33 +1,31 @@
-import ObjectID from 'bson-objectid';
-import { prompt } from 'inquirer';
-import { getTemplate } from './helpers/get-challenge-template';
-import { newTaskPrompts } from './helpers/new-task-prompts';
-import { getProjectPath } from './helpers/get-project-info';
+import { ObjectId } from 'bson';
+import { select } from '@inquirer/prompts';
+import { getTemplate } from './helpers/get-challenge-template.js';
+import { newTaskPrompts } from './helpers/new-task-prompts.js';
+import { getProjectPath } from './helpers/get-project-info.js';
 import {
   createChallengeFile,
   getChallenge,
   insertChallengeIntoMeta,
   updateTaskMeta,
   updateTaskMarkdownFiles
-} from './utils';
-import { getMetaData } from './helpers/project-metadata';
-import { getInputType } from './helpers/get-input-type';
+} from './utils.js';
+import { getMetaData } from './helpers/project-metadata.js';
+import { getInputType } from './helpers/get-input-type.js';
 
 const insertChallenge = async () => {
   const challenges = getMetaData().challengeOrder;
-  const challengeAfter = await prompt<{ id: string }>({
-    name: 'id',
+  const challengeAfterId = await select<string>({
     message: 'Which challenge should come AFTER this new one?',
-    type: 'list',
     choices: challenges.map(({ id, title }) => ({
       name: title,
       value: id
     }))
   });
-  const challengeLang = getChallenge(challengeAfter.id)?.lang;
+  const challengeLang = getChallenge(challengeAfterId)?.lang;
 
   const indexToInsert = challenges.findIndex(
-    ({ id }) => id === challengeAfter.id
+    ({ id }) => id === challengeAfterId
   );
 
   const newTaskTitle = 'Task 0';
@@ -45,9 +43,9 @@ const insertChallenge = async () => {
 
   const path = getProjectPath();
   const template = getTemplate(challengeType);
-  const challengeId = new ObjectID();
+  const challengeId = new ObjectId();
   const challengeText = template({ ...options, challengeId });
-  // eslint-disable-next-line @typescript-eslint/no-base-to-string
+
   const challengeIdString = challengeId.toString();
 
   createChallengeFile(challengeIdString, challengeText, path);

@@ -54,10 +54,10 @@ assert.lengthOf(document.querySelector('body > div#menu > main')?.children, 3);
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cafe Menu</title>
-    <link href="styles.css" rel="stylesheet"/>
+    <link href="styles.css" rel="stylesheet" />
   </head>
---fcc-editable-region--
   <body>
+--fcc-editable-region--
     <main>
       <h1>CAMPER CAFE</h1>
       <p>Est. 2020</p>
@@ -65,8 +65,8 @@ assert.lengthOf(document.querySelector('body > div#menu > main')?.children, 3);
         <h2>Coffee</h2>
       </section>
     </main>
-  </body>
 --fcc-editable-region--
+  </body>
 </html>
 ```
 

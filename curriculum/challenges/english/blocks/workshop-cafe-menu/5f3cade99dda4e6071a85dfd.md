@@ -11,13 +11,13 @@ You will come back to styling the menu in a few steps, but for now, go ahead and
 
 # --hints--
 
-You should have an opening `section` tag.
+You should add a second `section` element.
 
 ```js
-assert.lengthOf(code.match(/<section>/ig) ,2);
+assert.lengthOf(document.querySelectorAll('section'), 2);
 ```
 
-You should have a closing `section` tag.
+You should have a second closing `section` tag.
 
 ```js
 assert.lengthOf(code.match(/<\/section>/ig) ,2);
@@ -33,7 +33,7 @@ Your new `section` element should be nested in the `main` element.
 
 ```js
 const main = document.querySelector('main');
-const sections = main?.querySelectorAll(`:scope ${'section'}`);
+const sections = main?.querySelectorAll('section');
 assert.lengthOf(sections,2);
 ```
 
@@ -48,14 +48,13 @@ assert.lengthOf(sections,2);
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cafe Menu</title>
-    <link href="styles.css" rel="stylesheet"/>
+    <link href="styles.css" rel="stylesheet" />
   </head>
   <body>
     <div class="menu">
       <main>
         <h1>CAMPER CAFE</h1>
         <p>Est. 2020</p>
---fcc-editable-region--
         <section>
           <h2>Coffee</h2>
           <article class="item">
@@ -74,6 +73,8 @@ assert.lengthOf(sections,2);
             <p class="flavor">Mocha</p><p class="price">4.50</p>
           </article>
         </section>
+--fcc-editable-region--
+        
 --fcc-editable-region--
       </main>
     </div>
@@ -108,7 +109,7 @@ h1, h2, p {
 
 .price {
   text-align: right;
-  width: 25%
+  width: 25%;
 }
 ```
 

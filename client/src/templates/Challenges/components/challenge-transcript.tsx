@@ -3,23 +3,29 @@ import { useTranslation } from 'react-i18next';
 import { Spacer } from '@freecodecamp/ui';
 import store from 'store';
 
+import PrismFormatted from './prism-formatted';
+import { getChallengeContentLangProps } from '../../../utils/challenge-content-lang';
 import './challenge-transcript.css';
 
 interface ChallengeTranscriptProps {
   transcript: string;
   shouldPersistExpanded?: boolean;
+  isDialogue?: boolean;
+  superBlock?: string;
 }
 
 function ChallengeTranscript({
   transcript,
-  shouldPersistExpanded
+  shouldPersistExpanded,
+  isDialogue,
+  superBlock
 }: ChallengeTranscriptProps): JSX.Element {
   const { t } = useTranslation();
 
   // default to collapsed
   const [isOpen, setIsOpen] = useState(() =>
     shouldPersistExpanded
-      ? (store.get('fcc-transcript-expanded') as boolean | null) ?? false
+      ? ((store.get('fcc-transcript-expanded') as boolean | null) ?? false)
       : false
   );
 
@@ -33,7 +39,11 @@ function ChallengeTranscript({
 
   return (
     <>
-      <details data-testid='challenge-transcript' open={isOpen}>
+      <details
+        data-testid='challenge-transcript'
+        className='challenge-transcript'
+        open={isOpen}
+      >
         <summary
           onClick={toggleExpandedState}
           aria-expanded={isOpen}
@@ -42,20 +52,19 @@ function ChallengeTranscript({
           {t('learn.transcript')}
         </summary>
         <Spacer size='m' />
-        <table className='transcript-table'>
-          <tbody>
-            {transcript
-              .split('\n')
-              .filter(line => line.trim() !== '')
-              .map((line, idx) => {
-                return (
-                  <tr key={idx}>
-                    <td dangerouslySetInnerHTML={{ __html: line }} />
-                  </tr>
-                );
-              })}
-          </tbody>
-        </table>
+        {isDialogue ? (
+          <div
+            className='transcript-dialogue'
+            dangerouslySetInnerHTML={{ __html: transcript }}
+            {...getChallengeContentLangProps(superBlock)}
+          />
+        ) : (
+          <PrismFormatted
+            className='line-numbers'
+            text={transcript}
+            {...getChallengeContentLangProps(superBlock)}
+          />
+        )}
       </details>
       <Spacer size='m' />
     </>

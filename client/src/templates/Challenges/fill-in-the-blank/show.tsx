@@ -10,9 +10,12 @@ import { bindActionCreators } from 'redux';
 import type { Dispatch } from 'redux';
 import { createSelector } from 'reselect';
 import { Container, Col, Row, Button, Spacer } from '@freecodecamp/ui';
-import ShortcutsModal from '../components/shortcuts-modal';
+
+import { ChallengeLang } from '@freecodecamp/shared/config/curriculum';
 
 // Local Utilities
+import ShortcutsModal from '../components/shortcuts-modal';
+import MobileAppModal from '../components/mobile-app-modal';
 import LearnLayout from '../../../components/layouts/learn';
 import { ChallengeNode, ChallengeMeta, Test } from '../../../redux/prop-types';
 import Hotkeys from '../components/hotkeys';
@@ -23,6 +26,7 @@ import HelpModal from '../components/help-modal';
 import FillInTheBlanks from '../components/fill-in-the-blanks';
 import ChallengeTranscript from '../components/challenge-transcript';
 import PrismFormatted from '../components/prism-formatted';
+import { getChallengeContentLangProps } from '../../../utils/challenge-content-lang';
 import {
   challengeMounted,
   updateChallengeMeta,
@@ -35,6 +39,7 @@ import { SceneSubject } from '../components/scene/scene-subject';
 import { getChallengePaths } from '../utils/challenge-paths';
 import { isChallengeCompletedSelector } from '../redux/selectors';
 import { replaceAppleQuotes } from '../../../utils/replace-apple-quotes';
+import { parseHanziPinyinPairs } from './parse-blanks';
 
 import './show.css';
 
@@ -88,9 +93,11 @@ const ShowFillInTheBlank = ({
         translationPending,
         challengeType,
         fillInTheBlank,
+        inputType,
         helpCategory,
         scene,
-        tests
+        tests,
+        lang
       }
     }
   },
@@ -103,7 +110,6 @@ const ShowFillInTheBlank = ({
 }: ShowFillInTheBlankProps) => {
   const { t } = useTranslation();
   const emptyArray = fillInTheBlank.blanks.map(() => null);
-
   const [showWrong, setShowWrong] = useState(false);
   const [userAnswers, setUserAnswers] = useState<(null | string)[]>(emptyArray);
   const [answersCorrect, setAnswersCorrect] =
@@ -124,23 +130,31 @@ const ShowFillInTheBlank = ({
       title,
       challengeType,
       helpCategory,
+      description,
       ...challengePaths
     });
     challengeMounted(challengeMeta.id);
-    container.current?.focus();
+    // hack to ensure the container is focused after the component mounts
+    // and Gatsby doesn't interfere with the focus.
+    requestAnimationFrame(() => container.current?.focus());
     // This effect should be run once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSubmit = () => {
+  const handleSubmitNonChinese = () => {
     const blankAnswers = fillInTheBlank.blanks.map(b => b.answer);
 
-    const newAnswersCorrect = userAnswers.map(
-      (userAnswer, i) =>
-        !!userAnswer &&
-        replaceAppleQuotes(userAnswer.trim()).toLowerCase() ===
-          blankAnswers[i].toLowerCase()
-    );
+    const newAnswersCorrect = userAnswers.map((userAnswer, i) => {
+      if (!userAnswer) return false;
+
+      const answer = blankAnswers[i];
+      const normalizedUserAnswer = replaceAppleQuotes(
+        userAnswer.trim()
+      ).toLowerCase();
+
+      return normalizedUserAnswer === answer.toLowerCase();
+    });
+
     setAnswersCorrect(newAnswersCorrect);
     const hasWrongAnswer = newAnswersCorrect.some(a => a === false);
     if (!hasWrongAnswer) {
@@ -160,11 +174,67 @@ const ShowFillInTheBlank = ({
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const inputIndex = parseInt(e.target.getAttribute('data-index') as string);
+  const handleSubmitChinese = () => {
+    const blankAnswers = fillInTheBlank.blanks.map(b => b.answer);
 
+    const newAnswersCorrect = userAnswers.map((userAnswer, i) => {
+      if (!userAnswer) return false;
+
+      const answer = blankAnswers[i];
+      const normalizedUserAnswer = userAnswer.trim().toLowerCase();
+
+      if (inputType === 'pinyin-to-hanzi') {
+        const pairs = parseHanziPinyinPairs(answer);
+        if (pairs.length === 1) {
+          const hanziPinyin = pairs[0];
+          const { hanzi } = hanziPinyin;
+          return (
+            normalizedUserAnswer.replace(/\s+/g, '') ===
+            hanzi.replace(/\s+/g, '')
+          );
+        }
+      } else if (inputType === 'pinyin-tone') {
+        // Ignore spaces to allow both syllable formats:
+        // spaced (e.g., 'nǐ hǎo') and unspaced (e.g., 'nǐhǎo').
+        return (
+          normalizedUserAnswer.replace(/\s+/g, '') ===
+          answer.toLowerCase().replace(/\s+/g, '')
+        );
+      }
+
+      return normalizedUserAnswer === answer.toLowerCase();
+    });
+
+    setAnswersCorrect(newAnswersCorrect);
+    const hasWrongAnswer = newAnswersCorrect.some(a => a === false);
+    if (!hasWrongAnswer) {
+      setShowFeedback(false);
+      setFeedback(null);
+      openCompletionModal();
+    } else {
+      const firstWrongIndex = newAnswersCorrect.findIndex(a => a === false);
+      const feedback =
+        firstWrongIndex >= 0
+          ? fillInTheBlank.blanks[firstWrongIndex].feedback
+          : null;
+
+      setFeedback(feedback);
+      setShowWrong(true);
+      setShowFeedback(true);
+    }
+  };
+
+  const handleSubmit = () => {
+    if (lang === ChallengeLang.Chinese) {
+      handleSubmitChinese();
+    } else {
+      handleSubmitNonChinese();
+    }
+  };
+
+  const handleInputChange = (inputIndex: number, value: string): void => {
     const newUserAnswers = [...userAnswers];
-    newUserAnswers[inputIndex] = e.target.value;
+    newUserAnswers[inputIndex] = value;
 
     const newAnswersCorrect = [...answersCorrect];
     newAnswersCorrect[inputIndex] = null;
@@ -208,18 +278,36 @@ const ShowFillInTheBlank = ({
             </ChallengeTitle>
 
             <Col md={8} mdOffset={2} sm={10} smOffset={1} xs={12}>
-              <PrismFormatted text={description} />
+              <PrismFormatted
+                text={description}
+                {...getChallengeContentLangProps(superBlock)}
+              />
               <Spacer size='m' />
             </Col>
 
-            {scene && <Scene scene={scene} sceneSubject={sceneSubject} />}
+            {scene && (
+              <Scene
+                scene={scene}
+                sceneSubject={sceneSubject}
+                superBlock={superBlock}
+              />
+            )}
 
             <Col md={8} mdOffset={2} sm={10} smOffset={1} xs={12}>
-              {transcript && <ChallengeTranscript transcript={transcript} />}
+              {transcript && (
+                <ChallengeTranscript
+                  transcript={transcript}
+                  isDialogue={true}
+                  superBlock={superBlock}
+                />
+              )}
 
               {instructions && (
                 <>
-                  <PrismFormatted text={instructions} />
+                  <PrismFormatted
+                    text={instructions}
+                    {...getChallengeContentLangProps(superBlock)}
+                  />
                   <Spacer size='xs' />
                 </>
               )}
@@ -229,16 +317,21 @@ const ShowFillInTheBlank = ({
               <ObserveKeys only={['ctrl', 'cmd', 'enter']}>
                 <FillInTheBlanks
                   fillInTheBlank={fillInTheBlank}
+                  inputType={inputType}
                   answersCorrect={answersCorrect}
                   showFeedback={showFeedback}
                   feedback={feedback}
                   showWrong={showWrong}
                   handleInputChange={handleInputChange}
+                  superBlock={superBlock}
                 />
               </ObserveKeys>
 
               {explanation ? (
-                <ChallegeExplanation explanation={explanation} />
+                <ChallegeExplanation
+                  explanation={explanation}
+                  superBlock={superBlock}
+                />
               ) : (
                 <Spacer size='m' />
               )}
@@ -266,6 +359,7 @@ const ShowFillInTheBlank = ({
           </Row>
         </Container>
         <ShortcutsModal />
+        <MobileAppModal superBlock={superBlock} />
       </LearnLayout>
     </Hotkeys>
   );
@@ -287,6 +381,7 @@ export const query = graphql`
         helpCategory
         superBlock
         block
+        lang
         fields {
           slug
         }
@@ -297,6 +392,7 @@ export const query = graphql`
             feedback
           }
         }
+        inputType
         tests {
           text
           testString

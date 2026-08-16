@@ -1,5 +1,6 @@
+import { BlockLabel, BlockLayouts } from '@freecodecamp/shared/config/blocks';
+
 interface Meta {
-  name: string;
   isUpcomingChange: boolean;
   dashedName: string;
   helpCategory: string;
@@ -9,13 +10,12 @@ interface Meta {
   }>;
   usesMultifileEditor?: boolean;
   hasEditableBoundaries?: boolean;
-  blockLabel?: string;
+  blockLabel?: BlockLabel;
   blockLayout?: string;
   order?: number;
 }
 
 const baseMeta: Meta = {
-  name: '',
   isUpcomingChange: true,
   dashedName: '',
   helpCategory: '',
@@ -36,15 +36,14 @@ const stepMeta = {
 
 const fullStackStepMeta = {
   ...baseMeta,
-  blockLabel: '',
-  blockLayout: '',
-  usesMultifileEditor: true
+  blockLabel: undefined as BlockLabel | undefined,
+  blockLayout: ''
 };
 
 const quizMeta = {
   ...baseMeta,
-  blockLabel: 'quiz',
-  blockLayout: 'link'
+  blockLabel: BlockLabel.quiz,
+  blockLayout: BlockLayouts.Link
 };
 
 const languageMeta = {
@@ -52,8 +51,36 @@ const languageMeta = {
   blockLayout: 'dialogue-grid'
 };
 
+const labMeta = {
+  ...baseMeta,
+  blockLabel: BlockLabel.lab,
+  blockLayout: '',
+  usesMultifileEditor: true
+};
+
+const workshopMeta = {
+  ...baseMeta,
+  blockLabel: BlockLabel.workshop,
+  blockLayout: '',
+  usesMultifileEditor: true,
+  hasEditableBoundaries: true
+};
+
+const lectureMeta = {
+  ...baseMeta,
+  blockLabel: BlockLabel.lecture,
+  blockLayout: ''
+};
+
 export const getBaseMeta = (
-  projectType: 'Step' | 'Quiz' | 'Language' | 'FullStack'
+  projectType:
+    | 'Step'
+    | 'Quiz'
+    | 'Language'
+    | 'FullStack'
+    | 'Lab'
+    | 'Workshop'
+    | 'Lecture'
 ): Meta => {
   switch (projectType) {
     case 'Step':
@@ -64,6 +91,12 @@ export const getBaseMeta = (
       return fullStackStepMeta;
     case 'Language':
       return languageMeta;
+    case 'Lab':
+      return labMeta;
+    case 'Workshop':
+      return workshopMeta;
+    case 'Lecture':
+      return lectureMeta;
     default:
       return stepMeta;
   }

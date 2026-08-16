@@ -1,36 +1,39 @@
 import fs from 'fs';
 import path from 'path';
-import ObjectID from 'bson-objectid';
+import { ObjectId } from 'bson';
 import matter from 'gray-matter';
 import { uniq } from 'lodash';
 
-import { challengeTypes } from '../../shared/config/challenge-types';
-import { parseCurriculumStructure } from '../../curriculum/src/build-curriculum';
-import { parseMDSync } from '../challenge-parser/parser';
-import { getMetaData, updateMetaData } from './helpers/project-metadata';
-import { getProjectPath } from './helpers/get-project-info';
-import { ChallengeSeed, getStepTemplate } from './helpers/get-step-template';
+import { challengeTypes } from '@freecodecamp/shared/config/challenge-types';
+import type { ChallengeLang } from '@freecodecamp/shared/config/curriculum';
+import { parseCurriculumStructure } from '@freecodecamp/curriculum/build-curriculum';
+import { parseMDSync } from '../challenge-parser/parser/index.js';
+import { getMetaData, updateMetaData } from './helpers/project-metadata.js';
+import { getProjectPath } from './helpers/get-project-info.js';
+import { ChallengeSeed, getStepTemplate } from './helpers/get-step-template.js';
 import {
   isTaskChallenge,
   getTaskNumberFromTitle
-} from './helpers/task-helpers';
-import { getTemplate } from './helpers/get-challenge-template';
+} from './helpers/task-helpers.js';
+import { getTemplate } from './helpers/get-challenge-template.js';
 
 interface Options {
+  challengeId: ObjectId;
   stepNum: number;
   challengeType?: number;
   projectPath?: string;
   challengeSeeds?: ChallengeSeed[];
   isFirstChallenge?: boolean;
-  challengeLang?: string;
+  challengeLang?: ChallengeLang;
 }
 
 interface QuizOptions {
+  challengeId: ObjectId;
   projectPath?: string;
   title: string;
   dashedName: string;
   questionCount: number;
-  challengeLang?: string;
+  challengeLang?: ChallengeLang;
 }
 
 export async function getAllBlocks() {
@@ -49,13 +52,12 @@ export async function getAllBlocks() {
 const createStepFile = ({
   stepNum,
   challengeType,
+  challengeId,
   projectPath = getProjectPath(),
   challengeSeeds = [],
   isFirstChallenge = false,
   challengeLang
-}: Options): ObjectID => {
-  const challengeId = new ObjectID();
-
+}: Options) => {
   const template = getStepTemplate({
     challengeId,
     challengeSeeds,
@@ -65,10 +67,7 @@ const createStepFile = ({
     challengeLang
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-base-to-string
   fs.writeFileSync(`${projectPath}${challengeId.toString()}.md`, template);
-
-  return challengeId;
 };
 
 const createChallengeFile = (
@@ -80,13 +79,13 @@ const createChallengeFile = (
 };
 
 const createQuizFile = ({
+  challengeId,
   projectPath = getProjectPath(),
   title,
   dashedName,
   questionCount,
   challengeLang
-}: QuizOptions): ObjectID => {
-  const challengeId = new ObjectID();
+}: QuizOptions): ObjectId => {
   const challengeType = challengeTypes.quiz.toString();
   const template = getTemplate(challengeType);
 
@@ -98,19 +97,20 @@ const createQuizFile = ({
     questionCount,
     challengeLang
   });
-  // eslint-disable-next-line @typescript-eslint/no-base-to-string
+
   fs.writeFileSync(`${projectPath}${challengeId.toString()}.md`, quizText);
   return challengeId;
 };
 
 const createDialogueFile = ({
+  challengeId,
   projectPath,
   challengeLang
 }: {
+  challengeId: ObjectId;
   projectPath: string;
-  challengeLang: string;
-}): ObjectID => {
-  const challengeId = new ObjectID();
+  challengeLang: ChallengeLang;
+}): ObjectId => {
   const challengeType = challengeTypes.dialogue.toString();
   const template = getTemplate(challengeType);
 
@@ -121,19 +121,19 @@ const createDialogueFile = ({
     dashedName: 'dialogue-1-im-tom',
     challengeLang
   });
-  // eslint-disable-next-line @typescript-eslint/no-base-to-string
+
   fs.writeFileSync(`${projectPath}${challengeId.toString()}.md`, dialogueText);
   return challengeId;
 };
 
 interface InsertOptions {
   stepNum: number;
-  stepId: ObjectID;
+  stepId: ObjectId;
 }
 
 interface InsertChallengeOptions {
   index: number;
-  id: ObjectID;
+  id: ObjectId;
   title: string;
 }
 
@@ -145,7 +145,6 @@ async function insertChallengeIntoMeta({
   const existingMeta = getMetaData();
   const challengeOrder = [...existingMeta.challengeOrder];
 
-  // eslint-disable-next-line @typescript-eslint/no-base-to-string
   challengeOrder.splice(index, 0, { id: id.toString(), title });
   await updateMetaData({ ...existingMeta, challengeOrder });
 }
@@ -153,7 +152,7 @@ async function insertChallengeIntoMeta({
 async function insertStepIntoMeta({ stepNum, stepId }: InsertOptions) {
   const existingMeta = getMetaData();
   const oldOrder = [...existingMeta.challengeOrder];
-  // eslint-disable-next-line @typescript-eslint/no-base-to-string
+
   oldOrder.splice(stepNum - 1, 0, { id: stepId.toString(), title: '' });
   // rename all the files in challengeOrder
   const challengeOrder = oldOrder.map(({ id }, index) => ({
@@ -276,7 +275,7 @@ const updateTaskMarkdownFiles = (): void => {
 type Challenge = {
   challengeType: number;
   challengeFiles: ChallengeSeed[];
-  lang?: string;
+  lang?: ChallengeLang;
 };
 
 const getChallenge = (challengeId: string): Challenge => {

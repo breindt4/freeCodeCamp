@@ -1,6 +1,6 @@
-/* eslint-disable @typescript-eslint/no-base-to-string */
-import ObjectID from 'bson-objectid';
-import { insertErms } from './insert-erms';
+import { ObjectId } from 'bson';
+import type { ChallengeLang } from '@freecodecamp/shared/config/curriculum';
+import { insertErms } from './insert-erms.js';
 
 // Builds a block
 function getCodeBlock(label: string, content?: string) {
@@ -21,20 +21,18 @@ ${content}`
 }
 
 type StepOptions = {
-  challengeId: ObjectID;
+  challengeId: ObjectId;
   challengeSeeds: ChallengeSeed[];
   stepNum: number;
   challengeType?: number;
   isFirstChallenge?: boolean;
-  challengeLang?: string;
+  challengeLang?: ChallengeLang;
 };
 
 export interface ChallengeSeed {
   contents: string;
   ext: string;
   editableRegionBoundaries: number[];
-  head?: string;
-  tail?: string;
 }
 
 // Build the base markdown for a step
@@ -56,20 +54,8 @@ function getStepTemplate({
     })
     .join('\n');
 
-  const seedHeads = challengeSeeds
-    .filter(({ head }) => head)
-    .map(({ ext, head }) => getCodeBlock(ext, head))
-    .join('\n');
-
-  const seedTails = challengeSeeds
-    .filter(({ tail }) => tail)
-    .map(({ ext, tail }) => getCodeBlock(ext, tail))
-    .join('\n');
-
   const stepDescription = `step ${stepNum} instructions`;
   const seedChallengeSection = getSeedSection(seedTexts, 'seed-contents');
-  const seedHeadSection = getSeedSection(seedHeads, 'before-user-code');
-  const seedTailSection = getSeedSection(seedTails, 'after-user-code');
 
   const demoString = isFirstChallenge
     ? `
@@ -99,10 +85,7 @@ ${stepDescription}
 Test 1
 
 ${getCodeBlock('js')}
-# --seed--` +
-    seedChallengeSection +
-    seedHeadSection +
-    seedTailSection
+# --seed--` + seedChallengeSection
   );
 }
 
